@@ -1,5 +1,28 @@
 package codeletgen.skeleton
 
+// This is my Complex class, it takes a T that needs an Operatiosn[T] implementation:
+class Complex[T] (var r: T, val i: T)(implicit o: Operations[T]) {      
+  import OperationsSyntax._
+
+  def +(b: Complex[T]): Complex[T] = new Complex(o.add(r, b.r), o.add(i, b.i))
+  def *(b: Complex[T]): Complex[T] = new Complex(o.mult(r, b.r), o.mult(i, b.i))
+
+  override def toString(): String = "(" + r + ", " + i +"i)"
+}
+
+// The Ops instance for Complex type. This is also parameterized
+// to support different type of Complex, it in turns takes an Operations[T]
+// to delegate the actual operations on its components to it.
+class ComplexOps[T](implicit o: Operations[T]) {
+  def Ops = new Operations[Complex[T]] {
+    def add(a: Complex[T], b: Complex[T]): Complex[T] = a + b
+    def const(c: Int): Complex[T] = new Complex(o.const(c), o.const(0))
+    def mult(a: Complex[T], b: Complex[T]): Complex[T] = a * b
+    def load(i: Int): Complex[T] = new Complex(o.load(i), o.const(0))
+  }
+}
+
+
 // The type class with the operations in our language.
 // Add here operations that will need to exist in the IR.
 sealed trait Operations[T] {
@@ -30,6 +53,10 @@ object OperationsInstances {
     def mult(a: Print, b: Print): Print = s"($a * $b)"
     def load(i: Int): Print = env(i)
   }
+
+  def ComplexInt(env: Int => Int) = new ComplexOps[Int]()(IntOps(env)).Ops 
+
+  def ComplexPrint(env: Int => Print) = new ComplexOps[Print]()(PrintOps(env)).Ops 
 }
 
 // The type class interface (Interface syntax, see Scala with Cats, Chapter 1)
@@ -45,6 +72,7 @@ object OperationsSyntax {
     def load[T](implicit o: Operations[T]): T = o.load(c)
   }
 }
+
 
 class SimpleExamples[T](implicit o: Operations[T]) {
   import OperationsSyntax._
@@ -77,24 +105,32 @@ class SimpleExamples[T](implicit o: Operations[T]) {
   }
 }
 
+
 object Test extends App {
   import OperationsInstances._
+
 
   // instantiate the direct semantics and the printing semantics
   val exI = new SimpleExamples()(IntOps( Map(1->1, 2->2, 3->3, 4->4) ))
   val exP = new SimpleExamples()(PrintOps( i=>s"input[$i]" ) )
+  val exC = new SimpleExamples()(ComplexPrint(i=>s"input[$i]" ))
+  //val exC = new SimpleExamples()(ComplexInt( Map(1->1, 2->2, 3->3, 4->4) ))
 
   // evaluate all examples under both semantics
 
-  println( exI.expr1 )
-  println( exP.expr1 )
+  // println( exI.expr1 )
+  // println( exP.expr1 )
+  println( exC.expr1 )
 
-  println( exI.expr2 )
-  println( exP.expr2 )
+  // println( exI.expr2 )
+  // println( exP.expr2 )
+  println( exC.expr2 )
 
-  println( exI.pow2n )
-  println( exP.pow2n )
+  // println( exI.pow2n )
+  // println( exP.pow2n )
+  println( exC.pow2n )
 
-  println( exI.load )
-  println( exP.load )
+  // println( exI.load )
+  // println( exP.load )
+  println( exC.load )
 }
