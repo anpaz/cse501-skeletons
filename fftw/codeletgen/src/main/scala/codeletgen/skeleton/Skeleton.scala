@@ -10,18 +10,6 @@ class Complex[T] (var r: T, val i: T)(implicit o: Operations[T]) {
   override def toString(): String = "(" + r + ", " + i +"i)"
 }
 
-// The Ops instance for Complex type. This is also parameterized
-// to support different type of Complex, it in turns takes an Operations[T]
-// to delegate the actual operations on its components to it.
-class ComplexOps[T](implicit o: Operations[T]) {
-  def Ops = new Operations[Complex[T]] {
-    def add(a: Complex[T], b: Complex[T]): Complex[T] = a + b
-    def const(c: Int): Complex[T] = new Complex(o.const(c), o.const(0))
-    def mult(a: Complex[T], b: Complex[T]): Complex[T] = a * b
-    def load(i: Int): Complex[T] = new Complex(o.load(i), o.const(0))
-  }
-}
-
 
 // The type class with the operations in our language.
 // Add here operations that will need to exist in the IR.
@@ -54,9 +42,19 @@ object OperationsInstances {
     def load(i: Int): Print = env(i)
   }
 
-  def ComplexInt(env: Int => Int) = new ComplexOps[Int]()(IntOps(env)).Ops 
+  // The Ops instance for Complex type. This is also parameterized
+  // to support different type of Complex, it in turns takes an Operations[T]
+  // to delegate the actual operations on its components to it.
+  def ComplexOps[T](implicit o: Operations[T]) = new Operations[Complex[T]] {
+    def add(a: Complex[T], b: Complex[T]): Complex[T] = a + b
+    def const(c: Int): Complex[T] = new Complex(o.const(c), o.const(0))
+    def mult(a: Complex[T], b: Complex[T]): Complex[T] = a * b
+    def load(i: Int): Complex[T] = new Complex(o.load(i), o.const(0))
+  }
 
-  def ComplexPrint(env: Int => Print) = new ComplexOps[Print]()(PrintOps(env)).Ops 
+  def ComplexInt(env: Int => Int) = ComplexOps[Int](IntOps(env))
+
+  def ComplexPrint(env: Int => Print) = ComplexOps[Print](PrintOps(env))
 }
 
 // The type class interface (Interface syntax, see Scala with Cats, Chapter 1)
