@@ -37,8 +37,12 @@ object showForComplex {
     }
   })
 
+
   // This to have a cleaner presentation of all the operations that represent a Complex as string
   implicit val complexStrShow: Show[Complex[String]] = Show.show(c => s"\n\t===> r <==: ${c.real}\n\t==> i <==: ${c.imag}\n")
+
+  // This to have a cleaner presentation of all the operations that represent a Complex as string
+  implicit val complexNodeShow: Show[Complex[Node]] = Show.show(c => s"\n\t===> r <==: ${c.real}\n\t==> i <==: ${c.imag}\n")
 
   // This to generate the code needed for a Vector after applying the FFT:
   implicit val vectorShow : Show[Vector[Complex[Instruction]]] = Show.show(c => {
@@ -66,7 +70,7 @@ import showForComplex._
 // This type class with all the operations we will need to do to 
 // implement the Field/Trig for Complex:
 // -----------------------------------------------------------------
-sealed trait NodeOperations[T] {
+sealed trait MyOperations[T] {
   def const(c: Int): T
   def const(c: Double): T
   def const(c: String): T
@@ -80,23 +84,23 @@ sealed trait NodeOperations[T] {
 // The type class interface, so the oeprations can be used implicitly:
 object OperationsSyntax {
   implicit class SyntaxOperations[T](a: T) {
-    def +(b: T)(implicit o: NodeOperations[T]): T = o.add(a, b)
-    def *(b: T)(implicit o: NodeOperations[T]): T = o.mult(a, b)
-    def /(b: T)(implicit o: NodeOperations[T]): T = o.div(a, b)
-    def -(b: T)(implicit o: NodeOperations[T]): T = o.negate(o.add(a, b))
-    def negate()(implicit o: NodeOperations[T]): T = o.negate(a)
-    def on(b: String)(implicit o: NodeOperations[T]): T = o.math(b, a)
+    def +(b: T)(implicit o: MyOperations[T]): T = o.add(a, b)
+    def *(b: T)(implicit o: MyOperations[T]): T = o.mult(a, b)
+    def /(b: T)(implicit o: MyOperations[T]): T = o.div(a, b)
+    def -(b: T)(implicit o: MyOperations[T]): T = o.negate(o.add(a, b))
+    def negate()(implicit o: MyOperations[T]): T = o.negate(a)
+    def on(b: String)(implicit o: MyOperations[T]): T = o.math(b, a)
   }
 
-  def const[T](c: Double)(implicit o: NodeOperations[T]) : T = o.const(c)
-  def const[T](c: Int)(implicit o: NodeOperations[T]) : T = o.const(c)
-  def const[T](c: String)(implicit o: NodeOperations[T]) : T = o.const(c)
+  def const[T](c: Double)(implicit o: MyOperations[T]) : T = o.const(c)
+  def const[T](c: Int)(implicit o: MyOperations[T]) : T = o.const(c)
+  def const[T](c: String)(implicit o: MyOperations[T]) : T = o.const(c)
 }
 
 // -----------------------------------------------------------------
 // Implement Field using our NodeOperations interface:
 // -----------------------------------------------------------------
-class NodeField[T](implicit o: NodeOperations[T]) extends Field.WithDefaultGCD[T] {
+class NodeField[T](implicit o: MyOperations[T]) extends Field.WithDefaultGCD[T] {
   import OperationsSyntax._
 
   override def minus(a:T, b:T): T = a - b
@@ -115,14 +119,14 @@ class NodeField[T](implicit o: NodeOperations[T]) extends Field.WithDefaultGCD[T
 // -----------------------------------------------------------------
 // Similarly, implement Trig using our NodeOperations interface:
 // -----------------------------------------------------------------
-class NodeTrig[T](implicit o: NodeOperations[T]) extends Trig[T] {
+class NodeTrig[T](implicit o: MyOperations[T]) extends Trig[T] {
   import OperationsSyntax._
   
   // and double to T:
   implicit def doubleToNum(d: Double) : T = const(d)
 
-  def e: T  = Math.E
-  def pi: T = Math.PI
+  def e: T  = math.E
+  def pi: T = math.Pi
 
   def exp(a: T): T   = a on "Math.exp"
   def expm1(a: T): T = a on "Math.expm1"
@@ -147,10 +151,10 @@ class NodeTrig[T](implicit o: NodeOperations[T]) extends Trig[T] {
 }
 
 // -----------------------------------------------------------------
-// The implmentation of NodeOperations on String
+// The implmentation of MyOperations on String
 // -----------------------------------------------------------------
 object StringOperations {
-  def ops = new NodeOperations[String] {
+  def ops = new MyOperations[String] {
     def const(c: Int) = new String(c.toString())
     def const(c: Double) = new String(c.toString())
     def const(c: String) = new String(c)
@@ -160,12 +164,36 @@ object StringOperations {
     def div(a: String, b: String)  = s"$a / $b"
     def negate(a: String) = s"-$a"
     def math(exp: String, v: String) = s"${exp}($v)"
-  } 
+  }
 }
 
+// -----------------------------------------------------------------
+// The implmentation of MyOperations for Node (IR)
+// -----------------------------------------------------------------
+trait Node
+case class Const(d: Double) extends Node
+case class Add(a: Node, b: Node) extends Node
+case class Mult(a: Node, b: Node) extends Node
+case class Div(a: Node, b:Node) extends Node
+case class Negate(a: Node) extends Node
+case class Math(exp: String, v: Node) extends Node
+
+object Node {
+  def ops = new MyOperations[Node] {
+    def const(c: Int) = new Const(c)
+    def const(c: Double) = new Const(c)
+    def const(c: String) = new Const(c.toDouble)
+
+    def add(a: Node, b: Node) = new Add(a, b)
+    def mult(a: Node, b: Node) = new Mult(a, b)
+    def div(a: Node, b: Node)  = new Div(a, b)
+    def negate(a: Node) = new Negate(a)
+    def math(exp: String, v: Node) = new Math(exp, v)
+  }
+}
 
 // -----------------------------------------------------------------
-// The implementation of NodeOperations for codegen (instructions)
+// The implementation of MyOperations for codegen (instructions)
 // -----------------------------------------------------------------
 class Instruction(label : String) {
   override def toString() = label
@@ -191,7 +219,7 @@ object Instruction {
     all.map(i => s"    double ${i._1} = ${i._2};").mkString("\n")
   }
 
-  def ops = new NodeOperations[Instruction] {
+  def ops = new MyOperations[Instruction] {
     def const(c: Int) = new Instruction(c.toString())
     def const(c: Double) = new Instruction(c.toString())
     def const(c: String) = new Instruction(c)
@@ -205,26 +233,44 @@ object Instruction {
 }
 
 // -----------------------------------
-// Instances of Spire interfaces:
+// Changes required for each scenario (the field/trig/adapter)
 // -----------------------------------
-object MySpireInstances {
+trait Scenario[T] {
+  val field : Field[T]
+  val trig: Trig[T]
+  val input: Vector[Complex[T]]
+}
+case class DefaultScenario(v: Vector[Complex[Double]]) extends Scenario[Double] {
   import spire.std.{DoubleIsField, DoubleIsTrig}
 
-  // These come from Spire itself.
-  val doubleField = new DoubleIsField {}
-  val doubleTrig = new DoubleIsTrig {}
-
-  // For printing instructions
-  val stringField = new NodeField()(StringOperations.ops) {}
-  val stringTrig = new NodeTrig()(StringOperations.ops) {}
-  def toComplexString(v: Complex[Double]) : Complex[String] = new Complex[String](v.real.toString(), v.imag.toString())
-
-  // for code gen
-  val codegenField = new NodeField()(Instruction.ops) {}
-  val codegenTrig = new NodeTrig()(Instruction.ops) {}
-  def toComplexInstruction(v: (Complex[Double], Int)) : Complex[Instruction] =
-    new Complex[Instruction](new Instruction(s"in[${v._2}].re"), new Instruction(s"in[${v._2}].im"))
+  val field = new DoubleIsField {}
+  val trig  = new DoubleIsTrig {}
+  val input = v
 }
+case class StringScenario(v: Vector[Complex[Double]]) extends Scenario[String] {
+  private def toComplexString(v: Complex[Double]) : Complex[String] = new Complex[String](v.real.toString(), v.imag.toString())
+
+  val field = new NodeField()(StringOperations.ops) {}
+  val trig  = new NodeTrig()(StringOperations.ops) {}
+  val input = v.map(toComplexString)
+}
+case class IRScenario(v: Vector[Complex[Double]]) extends Scenario[Node] {
+  private def toComplexNode(v: Complex[Double]) : Complex[Node] =
+    new Complex[Node](new Const(v.real), new Const(v.imag))
+  
+  val field = new NodeField()(Node.ops) {}
+  val trig  = new NodeTrig()(Node.ops) {}
+  val input = v.map(toComplexNode)
+}
+case class CodegenScenario(v: Vector[Complex[Double]]) extends Scenario[Instruction] {
+  private def toComplexInstruction(v: (Complex[Double], Int)) : Complex[Instruction] =
+      new Complex[Instruction](new Instruction(s"in[${v._2}].re"), new Instruction(s"in[${v._2}].im"))
+  
+  val field = new NodeField()(Instruction.ops) {}
+  val trig  = new NodeTrig()(Instruction.ops) {}
+  val input = v.zipWithIndex.map(toComplexInstruction)
+}
+
 
 object FFT {
   type T[x] = Complex[x]
@@ -275,7 +321,6 @@ object FFT {
 
 object FFT_Test extends App {
   import FFT._
-  import MySpireInstances._
 
   // X4 is the example from wikipedia on DFT
   val X4 = Vector(
@@ -294,19 +339,15 @@ object FFT_Test extends App {
     Complex(0.0,0), Complex(0.0,2)
   )
 
-  // This is the original double-based (i.e. calculate) version:
-  // val X = X10  // choose your input vector here
-  // implicit val field = doubleField
-  // implicit val trig  = doubleTrig 
+  val scenario = DefaultScenario(X10)
+  //val scenario = StringScenario(X4)
+  //val scenario = IRScenario(X4)
+  //val scenario = CodegenScenario(X4)
 
-  // This replaces field & trig with string-based implementation
-  // val X = X4.map(toComplexString)  // choose your input vector here
-  // implicit val field = stringField
-  // implicit val trig = stringTrig 
+  implicit val f = scenario.field
+  implicit val t = scenario.trig 
 
-  val X = X4.zipWithIndex.map(toComplexInstruction) // choose your input vector here
-  implicit val field = codegenField
-  implicit val trig = codegenTrig 
+  val X = scenario.input
 
   val Y       = fft   (X.length)(X(_))(1)  // compute with CooleyTukey, when applicable
   val Ydirect = direct(X.length)(X(_))(1)
